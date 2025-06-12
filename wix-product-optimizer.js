@@ -1,321 +1,320 @@
-class WixProductPageOptimizer extends HTMLElement {
+class WixJSOptimizer extends HTMLElement {
     constructor() {
         super();
         this.isLoaded = false;
-        this.isProductPage = this.detectProductPage();
+        this.optimizationStartTime = performance.now();
         
-        // Critical scripts that need to load first for core functionality
+        // Critical scripts that need high priority loading
         this.criticalScripts = [
             'https://static.parastorage.com/services/wix-thunderbolt/dist/main.7120cb19.bundle.min.js',
-            'https://static.parastorage.com/services/wix-thunderbolt/dist/thunderbolt-commons.6e36e998.bundle.min.js'
+            'https://static.parastorage.com/services/wix-thunderbolt/dist/thunderbolt-commons.6e36e998.bundle.min.js',
+            'https://static.parastorage.com/unpkg/react@18.3.1/umd/react.production.min.js'
         ];
 
-        // High priority scripts for product page functionality
-        this.highPriorityScripts = [
-            'https://static.parastorage.com/unpkg/react@18.3.1/umd/react.production.min.js',
-            'https://static.parastorage.com/services/wix-thunderbolt/dist/group_6.9a28cbeb.chunk.min.js'
-        ];
-
-        // Medium priority UI components
-        this.mediumPriorityScripts = [
+        // Scripts that can be safely deferred for better performance
+        this.deferableScripts = [
+            'https://static.parastorage.com/services/editor-elements-library/dist/thunderbolt/rb_wixui.thunderbolt[ProGallery_Default].0cb576c2.bundle.min.js',
+            'https://static.parastorage.com/services/wix-thunderbolt/dist/animations.67be3a64.chunk.min.js',
+            'https://static.parastorage.com/services/wix-thunderbolt/dist/group_6.9a28cbeb.chunk.min.js',
             'https://static.parastorage.com/services/wix-thunderbolt/dist/consentPolicy.c82a047f.chunk.min.js',
+            'https://static.parastorage.com/services/form-app/1.1863.0/client-viewer/form-app-wix-ricos-viewer.chunk.min.js',
             'https://static.parastorage.com/services/ecom-platform-cart-icon/1.1570.0/CartIconViewerWidgetNoCss.bundle.min.js'
         ];
 
-        // Low priority/deferred scripts for enhanced functionality
-        this.lowPriorityScripts = [
-            'https://static.parastorage.com/services/editor-elements-library/dist/thunderbolt/rb_wixui.thunderbolt[ProGallery_Default].0cb576c2.bundle.min.js',
-            'https://static.parastorage.com/services/wix-thunderbolt/dist/animations.67be3a64.chunk.min.js',
-            'https://static.parastorage.com/services/form-app/1.1863.0/client-viewer/form-app-wix-ricos-viewer.chunk.min.js'
-        ];
-
-        // Optional/unused scripts that can be skipped or loaded last
+        // Optional scripts that can be loaded last
         this.optionalScripts = [
+            'https://browser.sentry-cdn.com/7.120.3/bundle.tracing.es5.min.js'
         ];
 
-        // Store current page URL for dynamic handling
-        this.currentPageUrl = window.location.href;
+        this.loadedScripts = new Set();
+        this.failedScripts = new Set();
     }
 
     connectedCallback() {
         this.style.display = 'none'; // Hidden element
-        this.initProductPageOptimization();
+        this.initOptimization();
     }
 
-    detectProductPage() {
-        const path = window.location.pathname;
-        const url = window.location.href;
-        
-        // Check if URL contains product-page pattern
-        return path.includes('/product-page/') || 
-               url.includes('/product-page/') ||
-               path.match(/\/[\w-]+\/product-page\/[\w-]+/);
-    }
-
-    initProductPageOptimization() {
-        // Wait for DOM to be fully loaded
+    initOptimization() {
+        // Wait for initial DOM load but don't interfere with existing scripts
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => this.startOptimization());
         } else {
-            this.startOptimization();
+            // Use a slight delay to ensure existing scripts start loading first
+            setTimeout(() => this.startOptimization(), 100);
         }
     }
 
     startOptimization() {
-        console.log('🛍️ Starting Wix Product Page Optimization...');
+        console.log('⚡ Starting Wix JS Library Optimization...');
         
-        // Remove existing scripts that match our URLs to prevent double loading
-        this.removeExistingScripts();
-        
-        // Preload critical resources first
-        this.preloadCriticalResources();
-        
-        // Load scripts in priority order
-        this.loadCriticalScripts().then(() => {
-            this.loadHighPriorityScripts().then(() => {
-                this.scheduleMediumPriorityLoading();
-            });
-        });
-    }
-
-    removeExistingScripts() {
-        const allScripts = [
-            ...this.criticalScripts, 
-            ...this.highPriorityScripts,
-            ...this.mediumPriorityScripts, 
-            ...this.lowPriorityScripts,
-            ...this.optionalScripts
-        ];
-        
-        const existingScripts = document.querySelectorAll('script[src]');
-        
-        existingScripts.forEach(script => {
-            const src = script.getAttribute('src');
-            if (src && allScripts.some(url => this.matchesScriptUrl(src, url))) {
-                script.setAttribute('data-product-optimized', 'true');
-            }
-        });
-    }
-
-    matchesScriptUrl(existingSrc, targetUrl) {
-        const existingFilename = existingSrc.split('/').pop();
-        const targetFilename = targetUrl.split('/').pop();
-        return existingFilename === targetFilename || existingSrc.includes(targetFilename);
-    }
-
-    async loadCriticalScripts() {
-        console.log('⚡ Loading critical scripts...');
-        // Load core Wix infrastructure first
-        for (const scriptUrl of this.criticalScripts) {
-            await this.loadScript(scriptUrl, { 
-                priority: 'high', 
-                defer: false,
-                critical: true 
-            });
-        }
-    }
-
-    async loadHighPriorityScripts() {
-        console.log('🔧 Loading high priority scripts...');
-        // Load React and essential product page functionality
-        for (const scriptUrl of this.highPriorityScripts) {
-            await this.loadScript(scriptUrl, { 
-                priority: 'high', 
-                defer: false 
-            });
-        }
-    }
-
-    scheduleMediumPriorityLoading() {
-        // Use requestIdleCallback for medium priority scripts
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => this.loadMediumPriorityScripts(), { timeout: 3000 });
-        } else {
-            setTimeout(() => this.loadMediumPriorityScripts(), 800);
-        }
-    }
-
-    async loadMediumPriorityScripts() {
-        console.log('🎨 Loading medium priority scripts...');
-        // Load UI components in parallel
-        const loadPromises = this.mediumPriorityScripts.map(scriptUrl => 
-            this.loadScript(scriptUrl, { 
-                priority: 'low', 
-                defer: true, 
-                async: true 
-            })
-        );
-
-        await Promise.allSettled(loadPromises);
-        this.scheduleLowPriorityLoading();
-    }
-
-    scheduleLowPriorityLoading() {
-        // Further delay low priority scripts
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => this.loadLowPriorityScripts(), { timeout: 7000 });
-        } else {
-            setTimeout(() => this.loadLowPriorityScripts(), 2000);
-        }
-    }
-
-    async loadLowPriorityScripts() {
-        console.log('🎯 Loading low priority scripts...');
-        
-        // Only load ProGallery if we're actually on a product page
-        let scriptsToLoad = this.lowPriorityScripts;
-        if (!this.isProductPage) {
-            scriptsToLoad = scriptsToLoad.filter(url => !url.includes('ProGallery'));
-        }
-
-        // Load remaining scripts with lowest priority
-        const loadPromises = scriptsToLoad.map(scriptUrl => 
-            this.loadScript(scriptUrl, { 
-                priority: 'low', 
-                defer: true, 
-                async: true 
-            })
-        );
-
-        await Promise.allSettled(loadPromises);
-        this.scheduleOptionalScripts();
-    }
-
-    scheduleOptionalScripts() {
-        // Load optional scripts only if browser is idle
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => this.loadOptionalScripts(), { timeout: 10000 });
-        } else {
-            // Skip optional scripts on older browsers
-            setTimeout(() => this.onOptimizationComplete(), 100);
-        }
-    }
-
-    async loadOptionalScripts() {
-        console.log('📊 Loading optional scripts...');
-        // Load tracking and optional functionality last
-        const loadPromises = this.optionalScripts.map(scriptUrl => 
-            this.loadScript(scriptUrl, { 
-                priority: 'low', 
-                defer: true, 
-                async: true,
-                optional: true 
-            })
-        );
-
-        await Promise.allSettled(loadPromises);
-        this.onOptimizationComplete();
-    }
-
-    loadScript(src, options = {}) {
-        return new Promise((resolve, reject) => {
-            // Check if script already exists and isn't marked for optimization
-            const existingScript = document.querySelector(`script[src*="${src.split('/').pop()}"]`);
-            if (existingScript && !existingScript.hasAttribute('data-product-optimized')) {
-                resolve();
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = src;
-            script.crossOrigin = 'anonymous';
+        try {
+            // Step 1: Enhance loading with preloads (non-intrusive)
+            this.addResourcePreloads();
             
-            // Apply performance optimizations
-            if (options.defer) script.defer = true;
-            if (options.async) script.async = true;
+            // Step 2: Add performance hints to existing scripts
+            this.enhanceExistingScripts();
             
-            // Set resource hints for better loading
-            if (options.priority) {
-                script.setAttribute('fetchpriority', options.priority);
-            }
-
-            // Add loading strategy attributes
-            if (options.critical) {
-                script.setAttribute('data-critical', 'true');
-            }
-
-            script.onload = () => {
-                const scriptName = src.split('/').pop();
-                const emoji = options.critical ? '🚀' : options.optional ? '📱' : '✅';
-                console.log(`${emoji} Optimized loading: ${scriptName}`);
-                resolve();
-            };
+            // Step 3: Setup intelligent script loading
+            this.setupIntelligentLoading();
             
-            script.onerror = (error) => {
-                const scriptName = src.split('/').pop();
-                if (options.optional) {
-                    console.log(`⏭️ Optional script skipped: ${scriptName}`);
-                } else {
-                    console.warn(`⚠️ Failed to load: ${scriptName}`, error);
-                }
-                resolve(); // Continue even if one script fails
-            };
-
-            // Append to head for better caching
-            document.head.appendChild(script);
-        });
+            // Step 4: Monitor and report performance
+            this.monitorPerformance();
+            
+        } catch (error) {
+            console.warn('⚠️ Optimization error, falling back to default loading:', error);
+            this.onOptimizationComplete();
+        }
     }
 
-    preloadCriticalResources() {
-        // Preload only the most critical scripts
+    addResourcePreloads() {
+        // Add preload hints for critical scripts without interfering with existing loading
         this.criticalScripts.forEach(src => {
-            const link = document.createElement('link');
-            link.rel = 'preload';
-            link.href = src;
-            link.as = 'script';
-            link.crossOrigin = 'anonymous';
-            document.head.appendChild(link);
+            if (!this.hasExistingPreload(src)) {
+                const link = document.createElement('link');
+                link.rel = 'preload';
+                link.href = src;
+                link.as = 'script';
+                link.crossOrigin = 'anonymous';
+                link.setAttribute('data-wix-optimized', 'true');
+                document.head.appendChild(link);
+            }
         });
 
-        // DNS prefetch for parastorage domain
-        const prefetch = document.createElement('link');
-        prefetch.rel = 'dns-prefetch';
-        prefetch.href = '//static.parastorage.com';
-        document.head.appendChild(prefetch);
+        // Add connection optimizations
+        this.addConnectionOptimizations();
+    }
 
-        // Preconnect for faster loading
-        const preconnect = document.createElement('link');
-        preconnect.rel = 'preconnect';
-        preconnect.href = 'https://static.parastorage.com';
-        preconnect.crossOrigin = 'anonymous';
-        document.head.appendChild(preconnect);
+    hasExistingPreload(src) {
+        const existing = document.querySelector(`link[rel="preload"][href="${src}"]`);
+        return !!existing;
+    }
+
+    addConnectionOptimizations() {
+        const optimizations = [
+            { rel: 'dns-prefetch', href: '//static.parastorage.com' },
+            { rel: 'preconnect', href: 'https://static.parastorage.com', crossOrigin: 'anonymous' },
+            { rel: 'dns-prefetch', href: '//browser.sentry-cdn.com' },
+            { rel: 'dns-prefetch', href: '//www.googletagmanager.com' }
+        ];
+
+        optimizations.forEach(opt => {
+            const existing = document.querySelector(`link[rel="${opt.rel}"][href="${opt.href}"]`);
+            if (!existing) {
+                const link = document.createElement('link');
+                link.rel = opt.rel;
+                link.href = opt.href;
+                if (opt.crossOrigin) link.crossOrigin = opt.crossOrigin;
+                link.setAttribute('data-wix-optimized', 'true');
+                document.head.appendChild(link);
+            }
+        });
+    }
+
+    enhanceExistingScripts() {
+        // Add performance attributes to existing scripts without breaking them
+        const scripts = document.querySelectorAll('script[src]');
+        
+        scripts.forEach(script => {
+            const src = script.getAttribute('src');
+            if (!src) return;
+
+            // Don't modify scripts that are already optimized
+            if (script.hasAttribute('data-wix-optimized')) return;
+
+            // Add fetchpriority to critical scripts
+            if (this.isCriticalScript(src)) {
+                script.setAttribute('fetchpriority', 'high');
+                script.setAttribute('data-wix-optimized', 'high-priority');
+            }
+            
+            // Add defer to deferrable scripts that aren't critical
+            else if (this.isDeferableScript(src)) {
+                if (!script.async && !script.defer) {
+                    script.defer = true;
+                    script.setAttribute('data-wix-optimized', 'deferred');
+                }
+            }
+            
+            // Mark optional scripts with low priority
+            else if (this.isOptionalScript(src)) {
+                script.setAttribute('fetchpriority', 'low');
+                script.setAttribute('data-wix-optimized', 'low-priority');
+            }
+        });
+    }
+
+    isCriticalScript(src) {
+        return this.criticalScripts.some(url => 
+            src.includes(url.split('/').pop()) || 
+            src.includes(url.split('/').slice(-2).join('/'))
+        );
+    }
+
+    isDeferableScript(src) {
+        return this.deferableScripts.some(url => 
+            src.includes(url.split('/').pop()) || 
+            src.includes(url.split('/').slice(-2).join('/'))
+        );
+    }
+
+    isOptionalScript(src) {
+        return this.optionalScripts.some(url => 
+            src.includes(url.split('/').pop()) || 
+            src.includes(url.split('/').slice(-2).join('/'))
+        );
+    }
+
+    setupIntelligentLoading() {
+        // Setup intersection observer for lazy loading when elements come into view
+        this.setupIntersectionObserver();
+        
+        // Setup idle time loading for optional scripts
+        this.setupIdleLoading();
+    }
+
+    setupIntersectionObserver() {
+        // Load heavy scripts when interactive elements become visible
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        this.loadVisibilityTriggeredScripts();
+                        observer.disconnect(); // Load once
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            // Observe interactive elements that might need heavy scripts
+            const interactiveElements = document.querySelectorAll(
+                '[class*="gallery"], [class*="animation"], [class*="form"], [class*="interactive"]'
+            );
+            
+            if (interactiveElements.length > 0) {
+                interactiveElements.forEach(el => observer.observe(el));
+            }
+
+            // Fallback timeout to ensure scripts load eventually
+            setTimeout(() => {
+                this.loadVisibilityTriggeredScripts();
+                observer.disconnect();
+            }, 5000);
+        } else {
+            // Fallback for older browsers
+            setTimeout(() => this.loadVisibilityTriggeredScripts(), 2000);
+        }
+    }
+
+    setupIdleLoading() {
+        // Load optional scripts during idle time
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => {
+                this.loadOptionalScripts();
+            }, { timeout: 7000 });
+        } else {
+            // Fallback for browsers without requestIdleCallback
+            setTimeout(() => this.loadOptionalScripts(), 3000);
+        }
+    }
+
+    loadVisibilityTriggeredScripts() {
+        // Ensure deferred scripts are prioritized when needed
+        const deferredScripts = document.querySelectorAll('script[data-wix-optimized="deferred"]');
+        deferredScripts.forEach(script => {
+            if (!this.loadedScripts.has(script.src)) {
+                script.setAttribute('fetchpriority', 'high');
+                this.loadedScripts.add(script.src);
+            }
+        });
+    }
+
+    loadOptionalScripts() {
+        // Boost priority of optional scripts during idle time
+        const optionalScripts = document.querySelectorAll('script[data-wix-optimized="low-priority"]');
+        optionalScripts.forEach(script => {
+            if (!this.loadedScripts.has(script.src)) {
+                script.setAttribute('fetchpriority', 'auto');
+                this.loadedScripts.add(script.src);
+            }
+        });
+    }
+
+    monitorPerformance() {
+        // Monitor script loading performance without interfering
+        const scripts = document.querySelectorAll('script[src]');
+        let loadedCount = 0;
+        let errorCount = 0;
+        
+        scripts.forEach(script => {
+            if (script.readyState === 'complete' || script.complete) {
+                loadedCount++;
+            } else {
+                script.addEventListener('load', () => {
+                    loadedCount++;
+                    this.logScriptLoad(script.src, 'success');
+                    this.checkOptimizationProgress(scripts.length, loadedCount, errorCount);
+                }, { once: true });
+                
+                script.addEventListener('error', (error) => {
+                    errorCount++;
+                    this.failedScripts.add(script.src);
+                    this.logScriptLoad(script.src, 'error');
+                    this.checkOptimizationProgress(scripts.length, loadedCount, errorCount);
+                }, { once: true });
+            }
+        });
+
+        // Initial check in case scripts are already loaded
+        this.checkOptimizationProgress(scripts.length, loadedCount, errorCount);
+    }
+
+    logScriptLoad(src, status) {
+        const scriptName = src.split('/').pop();
+        const emoji = status === 'success' ? '✅' : '❌';
+        console.log(`${emoji} ${scriptName} - ${status}`);
+    }
+
+    checkOptimizationProgress(totalScripts, loadedCount, errorCount) {
+        const completedCount = loadedCount + errorCount;
+        const loadProgress = (completedCount / totalScripts) * 100;
+        
+        // Consider optimization complete when 90% of scripts are processed
+        if (loadProgress >= 90 && !this.isLoaded) {
+            setTimeout(() => this.onOptimizationComplete(), 500);
+        }
     }
 
     onOptimizationComplete() {
-        this.isLoaded = true;
+        if (this.isLoaded) return; // Prevent multiple calls
         
-        // Dispatch custom event for other scripts to listen
-        const event = new CustomEvent('wix-product-optimization-complete', {
+        this.isLoaded = true;
+        const optimizationTime = performance.now() - this.optimizationStartTime;
+        
+        // Calculate performance metrics
+        const totalScripts = document.querySelectorAll('script[src]').length;
+        const optimizedScripts = document.querySelectorAll('script[data-wix-optimized]').length;
+        const successRate = ((totalScripts - this.failedScripts.size) / totalScripts) * 100;
+        
+        // Dispatch completion event
+        const event = new CustomEvent('wix-js-optimization-complete', {
             detail: { 
-                optimizedScripts: [
-                    ...this.criticalScripts,
-                    ...this.highPriorityScripts,
-                    ...this.mediumPriorityScripts,
-                    ...this.lowPriorityScripts,
-                    ...this.optionalScripts
-                ],
-                loadTime: performance.now(),
-                isProductPage: this.isProductPage,
-                pageUrl: this.currentPageUrl
+                optimizationTime: optimizationTime,
+                totalScripts: totalScripts,
+                optimizedScripts: optimizedScripts,
+                failedScripts: Array.from(this.failedScripts),
+                successRate: successRate,
+                pageUrl: window.location.href
             }
         });
         document.dispatchEvent(event);
 
-        // Clean up old scripts marked for optimization
-        setTimeout(() => {
-            const oldScripts = document.querySelectorAll('script[data-product-optimized="true"]');
-            oldScripts.forEach(script => {
-                console.log(`🧹 Removing duplicate script: ${script.src.split('/').pop()}`);
-                script.remove();
-            });
-        }, 3000);
-
-        console.log('🛍️ Wix Product Page Optimization Complete!');
+        console.log('⚡ Wix JS Library Optimization Complete!');
+        console.log(`📊 Stats: ${optimizedScripts}/${totalScripts} scripts optimized`);
+        console.log(`⏱️ Optimization time: ${optimizationTime.toFixed(2)}ms`);
+        console.log(`📈 Success rate: ${successRate.toFixed(1)}%`);
         
-        // Log performance metrics
-        if (performance.mark) {
-            performance.mark('wix-product-optimization-end');
-            console.log(`⏱️ Total optimization time: ${performance.now().toFixed(2)}ms`);
+        if (this.failedScripts.size > 0) {
+            console.warn('⚠️ Scripts with loading issues:', Array.from(this.failedScripts));
         }
     }
 
@@ -324,49 +323,50 @@ class WixProductPageOptimizer extends HTMLElement {
         return this.isLoaded;
     }
 
-    forceLoadScript(scriptUrl, priority = 'high') {
-        return this.loadScript(scriptUrl, { priority });
+    getOptimizationStats() {
+        const totalScripts = document.querySelectorAll('script[src]').length;
+        const optimizedScripts = document.querySelectorAll('script[data-wix-optimized]').length;
+        
+        return {
+            isComplete: this.isLoaded,
+            optimizationTime: performance.now() - this.optimizationStartTime,
+            totalScripts: totalScripts,
+            optimizedScripts: optimizedScripts,
+            failedScripts: Array.from(this.failedScripts),
+            loadedScripts: Array.from(this.loadedScripts),
+            successRate: ((totalScripts - this.failedScripts.size) / totalScripts) * 100
+        };
     }
 
-    getPageType() {
-        return this.isProductPage ? 'product' : 'other';
+    // Manual optimization trigger
+    reoptimize() {
+        if (!this.isLoaded) return;
+        
+        console.log('🔄 Re-optimizing JS libraries...');
+        this.enhanceExistingScripts();
+        this.setupIntelligentLoading();
     }
 
-    // Method to manually trigger optimization restart (useful for SPA navigation)
-    restartOptimization() {
-        this.isLoaded = false;
-        this.isProductPage = this.detectProductPage();
-        this.currentPageUrl = window.location.href;
-        this.startOptimization();
+    // Cleanup method
+    cleanup() {
+        // Remove only our optimization hints, not original scripts
+        const optimizedElements = document.querySelectorAll('[data-wix-optimized="true"]');
+        optimizedElements.forEach(el => el.remove());
+        
+        console.log('🧹 Optimization cleanup complete');
     }
 }
 
 // Register the custom element
-customElements.define('wix-product-page-optimizer', WixProductPageOptimizer);
+customElements.define('wix-js-optimizer', WixJSOptimizer);
 
-// Auto-initialize optimization
+// Auto-initialization
 document.addEventListener('DOMContentLoaded', () => {
-    const optimizer = document.querySelector('wix-product-page-optimizer');
-    if (!optimizer) {
-        // Auto-create if not present
-        const element = document.createElement('wix-product-page-optimizer');
+    if (!document.querySelector('wix-js-optimizer')) {
+        const element = document.createElement('wix-js-optimizer');
         document.body.appendChild(element);
     }
 });
 
-// Handle SPA navigation for dynamic product pages
-let lastUrl = location.href;
-new MutationObserver(() => {
-    const url = location.href;
-    if (url !== lastUrl) {
-        lastUrl = url;
-        const optimizer = document.querySelector('wix-product-page-optimizer');
-        if (optimizer && optimizer.restartOptimization) {
-            console.log('🔄 Page navigation detected, restarting optimization...');
-            setTimeout(() => optimizer.restartOptimization(), 500);
-        }
-    }
-}).observe(document, { subtree: true, childList: true });
-
 // Export for external use
-window.WixProductPageOptimizer = WixProductPageOptimizer;
+window.WixJSOptimizer = WixJSOptimizer;
