@@ -26,7 +26,6 @@ class WixProductPageOptimizer extends HTMLElement {
         this.lowPriorityScripts = [
             'https://static.parastorage.com/services/editor-elements-library/dist/thunderbolt/rb_wixui.thunderbolt[ProGallery_Default].0cb576c2.bundle.min.js',
             'https://static.parastorage.com/services/wix-thunderbolt/dist/animations.67be3a64.chunk.min.js',
-            'https://static.parastorage.com/services/form-app/1.1863.0/client-viewer/form-app-wix-ricos-viewer.chunk.min.js'
         ];
 
         // Optional/unused scripts that can be skipped or loaded last
