@@ -3,12 +3,14 @@ class WixJSOptimizer extends HTMLElement {
         super();
         this.isLoaded = false;
         this.optimizationStartTime = performance.now();
-        
+        this.isMobile = this.detectMobile(); // Mobile detection
+
         // Critical scripts that need high priority loading
         this.criticalScripts = [
             'https://static.parastorage.com/services/wix-thunderbolt/dist/main.7120cb19.bundle.min.js',
             'https://static.parastorage.com/services/wix-thunderbolt/dist/thunderbolt-commons.6e36e998.bundle.min.js',
-            'https://static.parastorage.com/unpkg/react@18.3.1/umd/react.production.min.js'
+            'https://static.parastorage.com/unpkg/react@18.3.1/umd/react.production.min.js',
+            'https://static.parastorage.com/unpkg/requirejs-bolt@2.3.6/requirejs.min.js' // Added missing critical script
         ];
 
         // Scripts that can be safely deferred for better performance
@@ -17,6 +19,8 @@ class WixJSOptimizer extends HTMLElement {
             'https://static.parastorage.com/services/wix-thunderbolt/dist/animations.67be3a64.chunk.min.js',
             'https://static.parastorage.com/services/wix-thunderbolt/dist/group_6.9a28cbeb.chunk.min.js',
             'https://static.parastorage.com/services/wix-thunderbolt/dist/consentPolicy.c82a047f.chunk.min.js',
+            'https://static.parastorage.com/services/editor-elements-library/dist/thunderbolt/rb_wixui.thunderbolt[RichContentViewer].f51859d2.bundle.min.js', // Added missing script
+            'https://static.parastorage.com/services/editor-elements-library/dist/thunderbolt/rb_wixui.thunderbolt_menu.069648f0.bundle.min.js', // Added missing script
             'https://static.parastorage.com/services/form-app/1.1863.0/client-viewer/form-app-wix-ricos-viewer.chunk.min.js',
             'https://static.parastorage.com/services/ecom-platform-cart-icon/1.1570.0/CartIconViewerWidgetNoCss.bundle.min.js'
         ];
@@ -30,18 +34,25 @@ class WixJSOptimizer extends HTMLElement {
         this.failedScripts = new Set();
     }
 
+    // Detect mobile devices
+    detectMobile() {
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase()) ||
+               window.innerWidth <= 768; // Consider small screens as mobile
+    }
+
     connectedCallback() {
         this.style.display = 'none'; // Hidden element
         this.initOptimization();
     }
 
     initOptimization() {
-        // Wait for initial DOM load but don't interfere with existing scripts
+        // Adjust initialization delay for mobile
+        const initDelay = this.isMobile ? 50 : 100; // Shorter delay on mobile for faster loading
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => this.startOptimization());
         } else {
-            // Use a slight delay to ensure existing scripts start loading first
-            setTimeout(() => this.startOptimization(), 100);
+            setTimeout(() => this.startOptimization(), initDelay);
         }
     }
 
@@ -49,18 +60,10 @@ class WixJSOptimizer extends HTMLElement {
         console.log('⚡ Starting Wix JS Library Optimization...');
         
         try {
-            // Step 1: Enhance loading with preloads (non-intrusive)
             this.addResourcePreloads();
-            
-            // Step 2: Add performance hints to existing scripts
             this.enhanceExistingScripts();
-            
-            // Step 3: Setup intelligent script loading
             this.setupIntelligentLoading();
-            
-            // Step 4: Monitor and report performance
             this.monitorPerformance();
-            
         } catch (error) {
             console.warn('⚠️ Optimization error, falling back to default loading:', error);
             this.onOptimizationComplete();
@@ -68,8 +71,9 @@ class WixJSOptimizer extends HTMLElement {
     }
 
     addResourcePreloads() {
-        // Add preload hints for critical scripts without interfering with existing loading
-        this.criticalScripts.forEach(src => {
+        // Preload critical scripts, limit concurrent preloads on mobile
+        const scriptsToPreload = this.isMobile ? this.criticalScripts.slice(0, 2) : this.criticalScripts; // Limit to 2 on mobile
+        scriptsToPreload.forEach(src => {
             if (!this.hasExistingPreload(src)) {
                 const link = document.createElement('link');
                 link.rel = 'preload';
@@ -81,13 +85,11 @@ class WixJSOptimizer extends HTMLElement {
             }
         });
 
-        // Add connection optimizations
         this.addConnectionOptimizations();
     }
 
     hasExistingPreload(src) {
-        const existing = document.querySelector(`link[rel="preload"][href="${src}"]`);
-        return !!existing;
+        return !!document.querySelector(`link[rel="preload"][href="${src}"]`);
     }
 
     addConnectionOptimizations() {
@@ -112,34 +114,29 @@ class WixJSOptimizer extends HTMLElement {
     }
 
     enhanceExistingScripts() {
-        // Add performance attributes to existing scripts without breaking them
         const scripts = document.querySelectorAll('script[src]');
         
         scripts.forEach(script => {
             const src = script.getAttribute('src');
-            if (!src) return;
+            if (!src || script.hasAttribute('data-wix-optimized')) return;
 
-            // Don't modify scripts that are already optimized
-            if (script.hasAttribute('data-wix-optimized')) return;
-
-            // Add fetchpriority to critical scripts
             if (this.isCriticalScript(src)) {
                 script.setAttribute('fetchpriority', 'high');
                 script.setAttribute('data-wix-optimized', 'high-priority');
-            }
-            
-            // Add defer to deferrable scripts that aren't critical
-            else if (this.isDeferableScript(src)) {
+            } else if (this.isDeferableScript(src)) {
                 if (!script.async && !script.defer) {
-                    script.defer = true;
+                    script.defer = true; // Always defer non-critical scripts
                     script.setAttribute('data-wix-optimized', 'deferred');
+                    if (this.isMobile) {
+                        script.setAttribute('loading', 'lazy'); // Add lazy loading for mobile
+                    }
                 }
-            }
-            
-            // Mark optional scripts with low priority
-            else if (this.isOptionalScript(src)) {
+            } else if (this.isOptionalScript(src)) {
                 script.setAttribute('fetchpriority', 'low');
                 script.setAttribute('data-wix-optimized', 'low-priority');
+                if (this.isMobile) {
+                    script.setAttribute('loading', 'lazy'); // Lazy load optional scripts on mobile
+                }
             }
         });
     }
@@ -166,26 +163,25 @@ class WixJSOptimizer extends HTMLElement {
     }
 
     setupIntelligentLoading() {
-        // Setup intersection observer for lazy loading when elements come into view
         this.setupIntersectionObserver();
-        
-        // Setup idle time loading for optional scripts
         this.setupIdleLoading();
     }
 
     setupIntersectionObserver() {
-        // Load heavy scripts when interactive elements become visible
         if ('IntersectionObserver' in window) {
+            const observerOptions = {
+                threshold: this.isMobile ? 0.05 : 0.1, // Lower threshold for mobile
+                rootMargin: this.isMobile ? '100px' : '200px' // Smaller margin for mobile
+            };
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         this.loadVisibilityTriggeredScripts();
-                        observer.disconnect(); // Load once
+                        observer.disconnect();
                     }
                 });
-            }, { threshold: 0.1 });
+            }, observerOptions);
 
-            // Observe interactive elements that might need heavy scripts
             const interactiveElements = document.querySelectorAll(
                 '[class*="gallery"], [class*="animation"], [class*="form"], [class*="interactive"]'
             );
@@ -194,42 +190,37 @@ class WixJSOptimizer extends HTMLElement {
                 interactiveElements.forEach(el => observer.observe(el));
             }
 
-            // Fallback timeout to ensure scripts load eventually
+            // Shorter timeout for mobile
             setTimeout(() => {
                 this.loadVisibilityTriggeredScripts();
                 observer.disconnect();
-            }, 5000);
+            }, this.isMobile ? 3000 : 5000);
         } else {
-            // Fallback for older browsers
-            setTimeout(() => this.loadVisibilityTriggeredScripts(), 2000);
+            setTimeout(() => this.loadVisibilityTriggeredScripts(), this.isMobile ? 1000 : 2000);
         }
     }
 
     setupIdleLoading() {
-        // Load optional scripts during idle time
         if ('requestIdleCallback' in window) {
             requestIdleCallback(() => {
                 this.loadOptionalScripts();
-            }, { timeout: 7000 });
+            }, { timeout: this.isMobile ? 5000 : 7000 }); // Shorter timeout for mobile
         } else {
-            // Fallback for browsers without requestIdleCallback
-            setTimeout(() => this.loadOptionalScripts(), 3000);
+            setTimeout(() => this.loadOptionalScripts(), this.isMobile ? 2000 : 3000);
         }
     }
 
     loadVisibilityTriggeredScripts() {
-        // Ensure deferred scripts are prioritized when needed
         const deferredScripts = document.querySelectorAll('script[data-wix-optimized="deferred"]');
         deferredScripts.forEach(script => {
             if (!this.loadedScripts.has(script.src)) {
-                script.setAttribute('fetchpriority', 'high');
+                script.setAttribute('fetchpriority', this.isMobile ? 'auto' : 'high'); // Lower priority on mobile
                 this.loadedScripts.add(script.src);
             }
         });
     }
 
     loadOptionalScripts() {
-        // Boost priority of optional scripts during idle time
         const optionalScripts = document.querySelectorAll('script[data-wix-optimized="low-priority"]');
         optionalScripts.forEach(script => {
             if (!this.loadedScripts.has(script.src)) {
@@ -240,7 +231,6 @@ class WixJSOptimizer extends HTMLElement {
     }
 
     monitorPerformance() {
-        // Monitor script loading performance without interfering
         const scripts = document.querySelectorAll('script[src]');
         let loadedCount = 0;
         let errorCount = 0;
@@ -264,38 +254,34 @@ class WixJSOptimizer extends HTMLElement {
             }
         });
 
-        // Initial check in case scripts are already loaded
         this.checkOptimizationProgress(scripts.length, loadedCount, errorCount);
     }
 
     logScriptLoad(src, status) {
         const scriptName = src.split('/').pop();
         const emoji = status === 'success' ? '✅' : '❌';
-        console.log(`${emoji} ${scriptName} - ${status}`);
+        console.log(`${emoji} ${scriptName} - ${status} ${this.isMobile ? '[Mobile]' : '[Desktop]'}`);
     }
 
     checkOptimizationProgress(totalScripts, loadedCount, errorCount) {
         const completedCount = loadedCount + errorCount;
         const loadProgress = (completedCount / totalScripts) * 100;
         
-        // Consider optimization complete when 90% of scripts are processed
         if (loadProgress >= 90 && !this.isLoaded) {
-            setTimeout(() => this.onOptimizationComplete(), 500);
+            setTimeout(() => this.onOptimizationComplete(), this.isMobile ? 300 : 500); // Faster completion on mobile
         }
     }
 
     onOptimizationComplete() {
-        if (this.isLoaded) return; // Prevent multiple calls
+        if (this.isLoaded) return;
         
         this.isLoaded = true;
         const optimizationTime = performance.now() - this.optimizationStartTime;
         
-        // Calculate performance metrics
         const totalScripts = document.querySelectorAll('script[src]').length;
         const optimizedScripts = document.querySelectorAll('script[data-wix-optimized]').length;
         const successRate = ((totalScripts - this.failedScripts.size) / totalScripts) * 100;
         
-        // Dispatch completion event
         const event = new CustomEvent('wix-js-optimization-complete', {
             detail: { 
                 optimizationTime: optimizationTime,
@@ -303,12 +289,13 @@ class WixJSOptimizer extends HTMLElement {
                 optimizedScripts: optimizedScripts,
                 failedScripts: Array.from(this.failedScripts),
                 successRate: successRate,
-                pageUrl: window.location.href
+                pageUrl: window.location.href,
+                isMobile: this.isMobile
             }
         });
         document.dispatchEvent(event);
 
-        console.log('⚡ Wix JS Library Optimization Complete!');
+        console.log(`⚡ Wix JS Library Optimization Complete! ${this.isMobile ? '[Mobile]' : '[Desktop]'}`);
         console.log(`📊 Stats: ${optimizedScripts}/${totalScripts} scripts optimized`);
         console.log(`⏱️ Optimization time: ${optimizationTime.toFixed(2)}ms`);
         console.log(`📈 Success rate: ${successRate.toFixed(1)}%`);
@@ -318,7 +305,6 @@ class WixJSOptimizer extends HTMLElement {
         }
     }
 
-    // Public methods for external use
     isOptimizationComplete() {
         return this.isLoaded;
     }
@@ -334,11 +320,11 @@ class WixJSOptimizer extends HTMLElement {
             optimizedScripts: optimizedScripts,
             failedScripts: Array.from(this.failedScripts),
             loadedScripts: Array.from(this.loadedScripts),
-            successRate: ((totalScripts - this.failedScripts.size) / totalScripts) * 100
+            successRate: ((totalScripts - this.failedScripts.size) / totalScripts) * 100,
+            isMobile: this.isMobile
         };
     }
 
-    // Manual optimization trigger
     reoptimize() {
         if (!this.isLoaded) return;
         
@@ -347,9 +333,7 @@ class WixJSOptimizer extends HTMLElement {
         this.setupIntelligentLoading();
     }
 
-    // Cleanup method
     cleanup() {
-        // Remove only our optimization hints, not original scripts
         const optimizedElements = document.querySelectorAll('[data-wix-optimized="true"]');
         optimizedElements.forEach(el => el.remove());
         
@@ -357,10 +341,8 @@ class WixJSOptimizer extends HTMLElement {
     }
 }
 
-// Register the custom element
 customElements.define('wix-js-optimizer', WixJSOptimizer);
 
-// Auto-initialization
 document.addEventListener('DOMContentLoaded', () => {
     if (!document.querySelector('wix-js-optimizer')) {
         const element = document.createElement('wix-js-optimizer');
@@ -368,5 +350,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Export for external use
 window.WixJSOptimizer = WixJSOptimizer;
