@@ -73,16 +73,23 @@ class WixProductOptimizer extends HTMLElement {
     }
 
     initPerformanceOptimization() {
-        // Critical path optimization
-        this.optimizeCriticalImages();
-        this.preloadResources();
-        
-        // Wait for DOM to be fully loaded
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.startOptimization());
-        } else {
-            this.startOptimization();
-        }
+        // Wait a bit to ensure page has started loading properly
+        setTimeout(() => {
+            // Critical path optimization - less aggressive
+            this.optimizeCriticalImages();
+            this.preloadResources();
+            
+            // Wait for DOM to be fully loaded
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    // Additional delay to prevent interference with page initialization
+                    setTimeout(() => this.startOptimization(), 500);
+                });
+            } else {
+                // Page already loaded, wait a bit more to be safe
+                setTimeout(() => this.startOptimization(), 1000);
+            }
+        }, 100);
     }
 
     optimizeCriticalImages() {
@@ -183,53 +190,95 @@ class WixProductOptimizer extends HTMLElement {
     }
 
     startOptimization() {
-        // Remove existing scripts to prevent double loading
+        // Only proceed if page seems stable
+        if (document.readyState !== 'complete') {
+            // Wait for page to fully load before optimizing
+            window.addEventListener('load', () => {
+                setTimeout(() => this.performOptimizations(), 500);
+            });
+        } else {
+            this.performOptimizations();
+        }
+    }
+
+    performOptimizations() {
+        // Track existing scripts without removing them
         this.removeExistingScripts();
         
-        // Handle unused scripts
+        // Optimize unused scripts loading strategy only
         this.handleUnusedScripts();
         
-        // Prevent React from being render-blocking
+        // Optimize React loading to prevent render blocking (gentler approach)
         this.optimizeReactLoading();
         
-        // Load critical scripts first with chunking
-        this.loadCriticalScriptsChunked().then(() => {
-            // Use requestIdleCallback for non-critical scripts
+        // Load additional optimized scripts only if needed
+        this.loadAdditionalOptimizations().then(() => {
             this.scheduleNonCriticalLoading();
         });
     }
 
+    async loadAdditionalOptimizations() {
+        // Only add scripts that aren't already present and working
+        const neededScripts = this.mainScripts.filter(scriptUrl => {
+            const scriptName = scriptUrl.split('/').pop();
+            const existing = document.querySelector(`script[src*="${scriptName}"]`);
+            return !existing;
+        });
+
+        // Load only truly missing critical scripts
+        for (const scriptUrl of neededScripts) {
+            await this.loadScript(scriptUrl, { 
+                priority: 'high', 
+                defer: false,
+                chunk: true 
+            });
+            await this.delay(100);
+        }
+    }
+
     removeExistingScripts() {
+        // Only mark scripts for optimization, don't remove them yet
         const allScripts = [...this.deferredScripts, ...this.mainScripts, ...this.optionalScripts];
         const existingScripts = document.querySelectorAll('script[src]');
         
         existingScripts.forEach(script => {
             const src = script.getAttribute('src');
             if (src && allScripts.some(url => src.includes(url.split('/').pop()))) {
-                script.setAttribute('data-product-optimized', 'true');
+                // Only mark for tracking, don't interfere with existing scripts
+                script.setAttribute('data-product-tracked', 'true');
             }
         });
     }
 
     handleUnusedScripts() {
-        // Remove or defer unused scripts
+        // Don't remove scripts, just optimize their loading strategy
+        // Let existing scripts continue working to prevent page breaking
         const existingScripts = document.querySelectorAll('script[src]');
         
         existingScripts.forEach(script => {
             const src = script.getAttribute('src');
             if (src && this.optionalScripts.some(url => src.includes(url.split('/').pop()))) {
-                script.setAttribute('data-defer-load', 'true');
-                script.remove();
+                // Only add loading optimizations, don't remove
+                if (!script.hasAttribute('defer') && !script.hasAttribute('async')) {
+                    script.setAttribute('defer', 'true');
+                }
+                script.setAttribute('data-optimized-loading', 'true');
             }
         });
     }
 
     optimizeReactLoading() {
-        // Prevent React from being render-blocking by loading it asynchronously
+        // Optimize React loading without breaking existing functionality
         const reactScripts = document.querySelectorAll('script[src*="react"]');
         reactScripts.forEach(script => {
-            if (!script.hasAttribute('async') && !script.hasAttribute('defer')) {
+            // Only optimize if not already optimized and not critical to immediate render
+            if (!script.hasAttribute('async') && 
+                !script.hasAttribute('defer') && 
+                !script.hasAttribute('data-critical')) {
+                
+                // Use defer instead of async to maintain execution order
                 script.setAttribute('defer', 'true');
+                script.setAttribute('data-react-optimized', 'true');
             }
         });
     }
@@ -348,8 +397,17 @@ class WixProductOptimizer extends HTMLElement {
 
     loadScript(src, options = {}) {
         return new Promise((resolve, reject) => {
+            // Check if script already exists and is working
             const existingScript = document.querySelector(`script[src*="${src.split('/').pop()}"]`);
-            if (existingScript && !existingScript.hasAttribute('data-product-optimized')) {
+            if (existingScript && !existingScript.hasAttribute('data-product-tracked')) {
+                // Script exists and working, don't duplicate
+                resolve();
+                return;
+            }
+
+            // Only add new scripts if they don't conflict with existing ones
+            if (existingScript && existingScript.hasAttribute('data-product-tracked')) {
+                // Let existing script handle this, just resolve
                 resolve();
                 return;
             }
@@ -367,8 +425,8 @@ class WixProductOptimizer extends HTMLElement {
                 script.setAttribute('fetchpriority', options.priority);
             }
 
-            // Add cache optimization headers
-            script.setAttribute('data-cache-optimized', 'true');
+            // Mark as optimizer-added
+            script.setAttribute('data-optimizer-added', 'true');
 
             script.onload = () => {
                 console.log(`✅ Product Page Optimized loading: ${src.split('/').pop()}`);
@@ -438,11 +496,21 @@ class WixProductOptimizer extends HTMLElement {
         });
         document.dispatchEvent(event);
 
-        // Clean up old scripts
+        // Clean up only scripts added by optimizer, not existing ones
         setTimeout(() => {
-            const oldScripts = document.querySelectorAll('script[data-product-optimized="true"]');
-            oldScripts.forEach(script => script.remove());
-        }, 3000);
+            // Only remove scripts that were added by this optimizer and failed to load
+            const optimizerScripts = document.querySelectorAll('script[data-optimizer-added="true"]');
+            optimizerScripts.forEach(script => {
+                // Only remove if there's a working version already present
+                const scriptName = script.src.split('/').pop();
+                const workingScript = document.querySelector(
+                    `script[src*="${scriptName}"]:not([data-optimizer-added="true"])`
+                );
+                if (workingScript) {
+                    script.remove();
+                }
+            });
+        }, 5000); // Longer delay to ensure page stability
 
         // Performance monitoring
         this.logPerformanceMetrics();
@@ -528,20 +596,28 @@ class WixProductOptimizer extends HTMLElement {
 // Register the custom element
 customElements.define('wix-product-optimizer', WixProductOptimizer);
 
-// Auto-initialize on product pages
+// Auto-initialize on product pages (more conservative)
 document.addEventListener('DOMContentLoaded', () => {
-    const optimizer = document.querySelector('wix-product-optimizer');
-    if (!optimizer) {
-        // Auto-create if on a product page
-        const isProductPage = window.location.href.match(
-            /\/(product-page|product|shop\/[^/]+|store\/[^/]+)/i
-        );
-        
-        if (isProductPage) {
-            const element = document.createElement('wix-product-optimizer');
-            document.body.appendChild(element);
+    // Wait for page to be more stable before initializing
+    setTimeout(() => {
+        const optimizer = document.querySelector('wix-product-optimizer');
+        if (!optimizer) {
+            // Only auto-create if clearly on a product page and page is stable
+            const isProductPage = window.location.href.match(
+                /\/(product-page|product|shop\/[^/]+|store\/[^/]+)/i
+            );
+            
+            // Additional check to ensure we're not interfering with a loading page
+            const hasProductElements = document.querySelectorAll(
+                '.gallery-item, [data-hook*="gallery"], .product-title, .price'
+            ).length > 0;
+            
+            if (isProductPage && hasProductElements && document.readyState === 'complete') {
+                const element = document.createElement('wix-product-optimizer');
+                document.body.appendChild(element);
+            }
         }
-    }
+    }, 2000); // Wait 2 seconds to ensure page stability
 });
 
 // Export for external use
